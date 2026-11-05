@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional
-from pydantic import BaseModel
+from typing import List, Literal, Optional
+from datetime import datetime
+from pydantic import BaseModel, Field
 from mock_data import inventory_items, orders, demand_forecasts, backlog_items, spending_summary, monthly_spending, category_spending, recent_transactions, purchase_orders
 
 app = FastAPI(title="Factory Inventory Management System")
@@ -100,6 +101,7 @@ class BacklogItem(BaseModel):
     days_delayed: int
     priority: str
     has_purchase_order: Optional[bool] = False
+    purchase_order_id: Optional[str] = None
 
 class PurchaseOrder(BaseModel):
     id: str
@@ -119,6 +121,24 @@ class CreatePurchaseOrderRequest(BaseModel):
     unit_cost: float
     expected_delivery_date: str
     notes: Optional[str] = None
+
+class Task(BaseModel):
+    id: str
+    title: str
+    priority: Literal["high", "medium", "low"]
+    dueDate: str
+    status: Literal["pending", "completed"]
+
+class CreateTaskRequest(BaseModel):
+    title: str = Field(min_length=1)
+    priority: Literal["high", "medium", "low"] = "medium"
+    dueDate: str
+
+# User-created tasks, newest first. In memory like the rest of the mock data.
+# The client also shows hard-coded demo tasks with integer ids, so these use
+# "task-N" string ids to avoid colliding with them.
+tasks: List[dict] = []
+_task_counter = 0
 
 # API endpoints
 @app.get("/")
@@ -174,8 +194,10 @@ def get_backlog():
     for item in backlog_items:
         item_dict = dict(item)
         # Check if this backlog item has a purchase order
-        has_po = any(po["backlog_item_id"] == item["id"] for po in purchase_orders)
-        item_dict["has_purchase_order"] = has_po
+        po = next((po for po in purchase_orders if po["backlog_item_id"] == item["id"]), None)
+        item_dict["has_purchase_order"] = po is not None
+        # The dashboard switches "Create PO" to "View PO" based on this id
+        item_dict["purchase_order_id"] = po["id"] if po else None
         result.append(item_dict)
     return result
 
@@ -303,6 +325,65 @@ def get_monthly_trends():
     result = list(months.values())
     result.sort(key=lambda x: x['month'])
     return result
+
+@app.post("/api/purchase-orders", response_model=PurchaseOrder, status_code=201)
+def create_purchase_order(request: CreatePurchaseOrderRequest):
+    """Create a purchase order for a backlog item (one PO per backlog item)"""
+    if not any(b["id"] == request.backlog_item_id for b in backlog_items):
+        raise HTTPException(status_code=404, detail="Backlog item not found")
+    if any(po["backlog_item_id"] == request.backlog_item_id for po in purchase_orders):
+        raise HTTPException(status_code=409, detail="Purchase order already exists for this backlog item")
+    if request.quantity <= 0 or request.unit_cost < 0:
+        raise HTTPException(status_code=400, detail="Quantity must be positive and unit cost non-negative")
+
+    po = {
+        "id": f"PO-{len(purchase_orders) + 1:04d}",
+        **request.model_dump(),
+        "status": "Pending",
+        "created_date": datetime.now().isoformat(timespec="seconds"),
+    }
+    purchase_orders.append(po)
+    return po
+
+@app.get("/api/purchase-orders/{backlog_item_id}", response_model=PurchaseOrder)
+def get_purchase_order_by_backlog_item(backlog_item_id: str):
+    """Get the purchase order attached to a backlog item"""
+    po = next((po for po in purchase_orders if po["backlog_item_id"] == backlog_item_id), None)
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    return po
+
+@app.get("/api/tasks", response_model=List[Task])
+def get_tasks():
+    """Get user-created tasks"""
+    return tasks
+
+@app.post("/api/tasks", response_model=Task, status_code=201)
+def create_task(request: CreateTaskRequest):
+    """Create a task"""
+    global _task_counter
+    _task_counter += 1
+    task = {"id": f"task-{_task_counter}", **request.model_dump(), "status": "pending"}
+    tasks.insert(0, task)
+    return task
+
+@app.patch("/api/tasks/{task_id}", response_model=Task)
+def toggle_task(task_id: str):
+    """Toggle a task between pending and completed"""
+    task = next((t for t in tasks if t["id"] == task_id), None)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task["status"] = "completed" if task["status"] == "pending" else "pending"
+    return task
+
+@app.delete("/api/tasks/{task_id}")
+def delete_task(task_id: str):
+    """Delete a task"""
+    task = next((t for t in tasks if t["id"] == task_id), None)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    tasks.remove(task)
+    return {"deleted": task_id}
 
 if __name__ == "__main__":
     import uvicorn
