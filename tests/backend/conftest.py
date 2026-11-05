@@ -11,7 +11,24 @@ from fastapi.testclient import TestClient
 server_path = Path(__file__).parent.parent.parent / "server"
 sys.path.insert(0, str(server_path))
 
+import main
 from main import app
+
+
+@pytest.fixture(autouse=True)
+def reset_tasks_and_purchase_orders():
+    """Tasks and purchase orders are also module state; clear them between tests.
+
+    purchase_orders is the same list object imported from mock_data, so clearing it
+    in place also clears what the endpoints see.
+    """
+    main.tasks.clear()
+    main.purchase_orders.clear()
+    main._task_counter = 0
+    yield
+    main.tasks.clear()
+    main.purchase_orders.clear()
+    main._task_counter = 0
 
 
 @pytest.fixture

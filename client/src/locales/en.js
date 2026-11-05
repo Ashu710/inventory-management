@@ -324,5 +324,40 @@ export default {
     filter: 'Filter',
     export: 'Export',
     items: 'items'
+  },
+  // Purchase orders
+  purchaseOrder: {
+    createButton: 'Create PO',
+    viewButton: 'View PO',
+    createTitle: 'Create Purchase Order',
+    viewTitle: 'Purchase Order',
+    sku: 'SKU',
+    orderId: 'Order ID',
+    quantityNeeded: 'Quantity Needed',
+    quantityAvailable: 'Quantity Available',
+    shortage: 'Shortage',
+    daysDelayed: 'Days Delayed',
+    units: '{count} units',
+    supplier: 'Supplier',
+    quantity: 'Quantity',
+    unitCost: 'Unit Cost',
+    total: 'Total',
+    expectedDelivery: 'Expected Delivery',
+    notes: 'Notes',
+    notesPlaceholder: 'Optional notes for the supplier',
+    status: 'Status',
+    createdDate: 'Created',
+    poId: 'PO Number',
+    submit: 'Create Purchase Order',
+    saving: 'Creating...',
+    loading: 'Loading purchase order...',
+    loadError: 'Failed to load purchase order',
+    createError: 'Failed to create purchase order',
+    validation: {
+      supplierRequired: 'Supplier is required',
+      quantityInvalid: 'Quantity must be greater than 0',
+      unitCostInvalid: 'Unit cost must be 0 or more',
+      dateRequired: 'Expected delivery date is required'
+    }
   }
 }
